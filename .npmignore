@@ -1,0 +1,25 @@
+# 源代码管理
+.git
+.github
+.gitignore
+
+# 开发文件
+node_modules
+*.log
+.DS_Store
+.env*
+*.db
+*.db-journal
+
+# 测试
+test
+coverage
+
+# 编辑器配置
+.vscode
+.idea
+*.swp
+*.swo
+
+# 其他
+.bun 

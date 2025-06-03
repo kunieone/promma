@@ -1,0 +1,53 @@
+# dependencies (bun install)
+node_modules/
+
+# output
+out
+dist/
+build/
+*.tgz
+*.map
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# dotenv environment variable files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea/
+
+# Finder (MacOS) folder config
+.DS_Store
+
+# Bun
+.bun/
+
+# 编辑器配置
+.vscode/
+*.swp
+*.swo
+
+# 可执行文件
+promma
+
+# 数据库文件
+*.db
+*.db-journal

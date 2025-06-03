@@ -1,0 +1,61 @@
+{
+  "name": "promma",
+  "version": "0.1.2",
+  "description": "CLI提示词管理工具，支持提示词的增删查改，并集成Gemini AI进行提示词生成",
+  "module": "index.ts",
+  "type": "module",
+  "bin": {
+    "promma": "./promma"
+  },
+  "scripts": {
+    "start": "bun run cli.ts",
+    "build": "bun build cli.ts --outfile promma --compile",
+    "prepublishOnly": "bun run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist",
+    "src",
+    "promma",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "prompt",
+    "cli",
+    "gemini",
+    "ai",
+    "bun"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/promma.git"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@types/cheerio": "^1.0.0",
+    "boxen": "^7.1.1",
+    "chalk": "^5.3.0",
+    "cheerio": "^1.0.0",
+    "clipboardy": "^4.0.0",
+    "commander": "^12.0.0",
+    "figlet": "^1.7.0",
+    "inquirer": "^9.2.15",
+    "marked": "^15.0.12",
+    "marked-terminal": "^7.3.0",
+    "ora": "^8.0.1",
+    "table": "^6.8.1"
+  },
+  "devDependencies": {
+    "@types/figlet": "^1.5.8",
+    "@types/inquirer": "^9.0.7",
+    "@types/marked-terminal": "^6.1.1",
+    "@types/node": "^22.15.0",
+    "bun-types": "latest"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}
