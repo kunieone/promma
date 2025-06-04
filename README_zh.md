@@ -15,6 +15,10 @@
 -   📦 **便捷导入**: 从JSON文件批量导入提示词。
 -   ⚡ **快捷命令**: 支持命令别名，操作更便捷。
 
+## 🔗 项目仓库
+
+https://github.com/kunieone/promma.git
+
 ## 🚀 快速安装
 
 Promma 可以通过 Bun 或 npm 进行全局安装，让您在任何地方都能使用 `promma` 命令。
@@ -226,6 +230,36 @@ promma clear-all
 
 ```bash
 promma clear
+```
+
+### 查看消化历史记录
+
+```bash
+promma history
+```
+
+或使用别名：
+
+```bash
+promma hist
+promma h
+```
+
+### 消化网页内容
+
+```bash
+promma digest <url> [自定义总结指令] [options]
+```
+
+- `<url>`: 要消化的网页链接。
+- `[自定义总结指令]`: 可选，自定义对网页内容的总结指令。
+- `[options]`:
+  - `-d, --depth <number>`: 递归抓取深度，默认为 `0` (不递归，只抓取初始页面)。例如，`1` 表示抓取初始页面及其第一层链接，以此类推。所有抓取到的内容将作为整体上下文用于总结。
+
+**示例:**
+
+```bash
+promma digest https://example.com/article "总结主要观点" -d 1
 ```
 
 ## 📂 数据存储

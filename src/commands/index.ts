@@ -19,8 +19,23 @@ import { resolve } from 'path';
 import { readFileSync } from 'fs';
 import { createPrompt, getPromptById, deletePrompt, updatePrompt, getAllPrompts, searchPrompts, clearAllPrompts, type Prompt } from '../models/promptModel';
 import { getDataDir as getPromptDataDir } from '../models/promptModel';
-import { getHistoryDataDir } from '../models/contentModel';
+import { getHistoryDataDir, getAllHistoryEntries, getHistoryEntryById, deleteHistoryEntry, clearAllHistoryEntries, type HistoryEntry } from '../models/contentModel';
 import { digestService } from '../services/digestService';
+
+// 新增接口
+interface DigestedPage {
+  url: string;
+  instruction?: string;
+  summary: string;
+  foundLinks: string[];
+  depth: number; // 记录当前页面的抓取深度，方便后续逻辑判断
+}
+
+interface MyInquirerChoice {
+  key: string;
+  name: string;
+  value: string;
+}
 
 // 配置Markdown终端渲染器
 // 使用类型断言解决类型兼容问题
@@ -51,6 +66,56 @@ const displayPrompt = (prompt: Prompt) => {
     `${chalk.dim(`ID: ${prompt.id} | 创建于: ${new Date(prompt.created_at!).toLocaleString()} | 更新于: ${new Date(prompt.updated_at!).toLocaleString()}`)}`,
     { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'blue' }
   ));
+};
+
+// 辅助函数：美化显示单个历史记录
+const displayHistoryEntry = (entry: HistoryEntry) => {
+  console.log(boxen(
+    `${chalk.bold(chalk.blue('消化历史'))}\n\n` +
+    `${chalk.blue('原始链接:')} ${entry.url}\n\n` +
+    `${entry.instruction ? `${chalk.blue('总结指令:')} ${entry.instruction}\n\n` : ''}` +
+    `${chalk.green('总结内容:')}\n${marked(entry.summary)}\n\n` +
+    `${chalk.dim(`ID: ${entry.id} | 创建于: ${new Date(entry.created_at!).toLocaleString()}`)}`,
+    { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'cyan' }
+  ));
+};
+
+// 辅助函数：历史记录交互式视图
+const historyInteractiveView = async (entry: HistoryEntry) => {
+  let currentEntry = entry;
+
+  while (true) {
+    displayHistoryEntry(currentEntry);
+    const { action } = await inquirer.prompt([
+      {
+        type: 'expand',
+        name: 'action',
+        message: '请选择操作:',
+        choices: [
+          { key: 'c', name: '复制总结内容', value: 'copy' },
+          { key: 'd', name: '删除此记录', value: 'delete' },
+          { key: 'q', name: '退出', value: 'quit' }
+        ],
+        default: 'q'
+      }
+    ]);
+
+    if (action === 'copy') {
+      clipboardy.writeSync(currentEntry.summary);
+      console.log(chalk.green('总结内容已成功复制到剪贴板！'));
+      break;
+    } else if (action === 'delete') {
+      const success = deleteHistoryEntry(Number(currentEntry.id));
+      if (success) {
+        console.log(chalk.green(`历史记录删除成功，ID: ${currentEntry.id}`));
+        break;
+      } else {
+        console.log(chalk.red('历史记录删除失败'));
+      }
+    } else if (action === 'quit') {
+      break;
+    }
+  }
 };
 
 // 辅助函数：删除提示词逻辑
@@ -123,6 +188,144 @@ const promptInteractiveView = async (initialPrompt: Prompt) => {
     } else if (action === 'quit') {
       break; // 退出循环
     }
+  }
+};
+
+// 辅助函数：处理消化命令的逻辑
+const handleDigestCommand = async (
+  url: string,
+  instruction: string | undefined,
+  initialDepth: number,
+  navigationStack: DigestedPage[] = [] // 新增导航栈参数
+) => {
+  try {
+    const depth = initialDepth;
+    // Show a spinner while digesting
+    const spinner = ora(chalk.blue('正在消化网页内容，请稍候...')).start();
+
+    const { result, error } = await digestService.digestUrl(url, instruction, depth, (message: string) => {
+      spinner.text = chalk.blue(message);
+    });
+
+    if (error) {
+      spinner.fail(chalk.red(`消化失败: ${error}`));
+      return;
+    }
+
+    spinner.succeed(chalk.green('网页内容消化完成！'));
+
+    if (result) {
+      const summaryMarkdown = result.summary;
+
+      // Display the summary
+      console.log(boxen(
+        `${chalk.bold(chalk.blue('AI 总结'))}\n\n` +
+        `${marked(summaryMarkdown)}\n\n` +
+        `${chalk.dim(`原文链接: ${result.url}`)}`,
+        { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'green' }
+      ));
+
+      // Offer to copy
+      // Refactor this into a loop to allow flexible navigation
+      let currentDigestedPage: DigestedPage = {
+        url: result.url,
+        instruction: instruction,
+        summary: summaryMarkdown,
+        foundLinks: result.foundLinks,
+        depth: depth
+      };
+
+      // Push current page to stack
+      navigationStack.push(currentDigestedPage);
+
+      // Start interactive loop
+      while (true) {
+        let choices: MyInquirerChoice[] = [
+          { key: 'c', name: '复制总结内容', value: 'copy' },
+          { key: 'q', name: '退出', value: 'quit' }
+        ];
+
+        if (currentDigestedPage.foundLinks && currentDigestedPage.foundLinks.length > 0) {
+          choices.push({ key: 'l', name: '查看并下钻相关链接', value: 'list_links' });
+        }
+
+        if (navigationStack.length > 1) { // If there's a previous page in history
+          choices.push({ key: 'u', name: '返回上一层', value: 'up' });
+        }
+
+        choices.push({ key: '?', name: '帮助', value: 'help' });
+
+        const { action } = await inquirer.prompt([
+          {
+            type: 'expand',
+            name: 'action',
+            message: '请选择操作:',
+            choices: choices,
+            default: 'q'
+          }
+        ]);
+
+        if (action === 'copy') {
+          clipboardy.writeSync(currentDigestedPage.summary);
+          console.log(chalk.green('总结内容已成功复制到剪贴板！'));
+        } else if (action === 'quit') {
+          break; // Exit the loop
+        } else if (action === 'list_links') {
+          // Display links and prompt for drill down
+          const { selectedLink } = await inquirer.prompt([
+            {
+              type: 'list',
+              name: 'selectedLink',
+              message: '请选择要下钻的链接:',
+              choices: currentDigestedPage.foundLinks.map((link, index) => {
+                const decodedLink = decodeURIComponent(link);
+                return {
+                  name: `${index + 1}. ${decodedLink.length > 80 ? decodedLink.substring(0, 77) + '...' : decodedLink}`,
+                  value: link
+                };
+              }),
+              pageSize: 10
+            }
+          ]);
+          
+          // Recursively call handleDigestCommand for the selected link with depth 0
+          await handleDigestCommand(selectedLink, instruction, 0, navigationStack);
+          
+          // After recursive call returns, ensure currentDigestedPage is up-to-date
+          currentDigestedPage = navigationStack[navigationStack.length - 1]!;
+
+          // Continue the loop to display the new current page or previous if back button used
+        } else if (action === 'up') {
+          if (navigationStack.length > 1) {
+            navigationStack.pop(); // Pop current page
+            currentDigestedPage = navigationStack[navigationStack.length - 1]!; // Get previous page
+            console.log(chalk.blue('已返回上一层。'));
+            // Re-display the previous page's summary
+            console.log(boxen(
+              `${chalk.bold(chalk.blue('AI 总结'))}\n\n` +
+              `${marked(currentDigestedPage.summary)}\n\n` +
+              `${chalk.dim(`原文链接: ${currentDigestedPage.url}`)}`,
+              { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'green' }
+            ));
+          } else {
+            console.log(chalk.yellow('已是顶层，无法返回。'));
+          }
+        } else if (action === 'help') {
+          console.log(boxen(
+            `${chalk.bold(chalk.blue('帮助信息'))}\n\n` +
+            `  ${chalk.cyan('c')}: 复制当前总结内容到剪贴板。\n` +
+            `  ${chalk.cyan('q')}: 退出消化会话。\n` +
+            `  ${chalk.cyan('l')}: 列出当前页面发现的链接，并选择下钻。\n` +
+            `  ${chalk.cyan('u')}: 返回到上一个消化的页面 (如果存在)。\n` +
+            `  ${chalk.cyan('?')}: 显示此帮助信息。\n\n` +
+            `提示: 通过下钻链接或返回上一层，可以在消化历史中灵活导航。`,
+            { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'yellow' }
+          ));
+        }
+      }
+    }
+  } catch (error) {
+    console.error(chalk.red('消化功能发生错误:'), error);
   }
 };
 
@@ -743,53 +946,49 @@ export const initCommands = async () => {
   // Digest URL
   program
     .command('digest <url> [instruction]')
-    .description('消化一个链接内容并输出AI总结的Markdown内容，可自定义总结指令')
-    .action(async (url: string, instruction?: string) => {
+    .description('消化一个链接内容并输出AI总结的Markdown内容，可自定义总结指令。支持递归抓取网页内容。')
+    .option('-d, --depth <number>', '递归抓取深度，默认为0 (不递归，只抓取初始页面)，1表示抓取初始页面及其第一层链接，以此类推。', '0')
+    .action(async (url: string, instruction: string | undefined, options: { depth?: string }) => {
+      const initialDepth = parseInt(options.depth || '0', 10);
+      await handleDigestCommand(url, instruction, initialDepth);
+    });
+
+  // History command
+  program
+    .command('history')
+    .aliases(['hist', 'h']) // Add alias
+    .description('查看消化历史记录')
+    .action(async () => {
       try {
-        // Show a spinner while digesting
-        const spinner = ora(chalk.blue('正在消化网页内容，请稍候...')).start();
+        const historyEntries = getAllHistoryEntries();
 
-        const { result, error } = await digestService.digestUrl(url, instruction);
-
-        if (error) {
-          spinner.fail(chalk.red(`消化失败: ${error}`));
+        if (historyEntries.length === 0) {
+          console.log(chalk.yellow('暂无历史记录'));
           return;
         }
 
-        spinner.succeed(chalk.green('网页内容消化完成！'));
-
-        if (result) {
-          const summaryMarkdown = result.summary;
-
-          // Display the summary
-          console.log(boxen(
-            `${chalk.bold(chalk.blue('AI 总结'))}\n\n` +
-            `${marked(summaryMarkdown)}\n\n` +
-            `${chalk.dim(`原文链接: ${result.url}`)}`,
-            { padding: 1, margin: 1, borderStyle: 'round', borderColor: 'green' }
-          ));
-
-          // Offer to copy
-          const { action } = await inquirer.prompt([
-            {
-              type: 'expand',
-              name: 'action',
-              message: '请选择操作:',
-              choices: [
-                { key: 'c', name: '复制总结内容', value: 'copy' },
-                { key: 'q', name: '退出', value: 'quit' }
-              ],
-              default: 'q'
-            }
-          ]);
-
-          if (action === 'copy') {
-            clipboardy.writeSync(summaryMarkdown);
-            console.log(chalk.green('总结内容已成功复制到剪贴板！'));
+        const { entryId } = await inquirer.prompt([
+          {
+            type: 'list',
+            name: 'entryId',
+            message: '选择一个历史记录 (按Enter查看详情，在详情页可复制/删除/退出): ',
+            choices: historyEntries.map((e: HistoryEntry) => ({
+              name: `${new Date(e.created_at!).toLocaleString()} - ${e.url.substring(0, 50)}${e.url.length > 50 ? '...' : ''}`,
+              value: e.id
+            })),
+            pageSize: 10 // Limit display to 10 choices at a time
           }
+        ]);
+
+        const selectedEntry = getHistoryEntryById(Number(entryId));
+        if (selectedEntry) {
+          await historyInteractiveView(selectedEntry); // Call interactive view
+        } else {
+          console.log(chalk.red('未找到选定的历史记录。'));
         }
+
       } catch (error) {
-        console.error(chalk.red('消化功能发生错误:'), error);
+        console.error(chalk.red('查看历史记录失败:'), error);
       }
     });
 

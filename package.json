@@ -31,7 +31,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/promma.git"
+    "url": "https://github.com/kunieone/promma.git"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

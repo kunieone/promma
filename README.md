@@ -15,6 +15,10 @@ A command-line AI prompt management tool that supports CRUD operations for promp
 -   📦 **Convenient Import**: Batch import prompts from JSON files.
 -   ⚡ **Quick Commands**: Supports command aliases for faster operations.
 
+## 🔗 Repository
+
+https://github.com/kunieone/promma.git
+
 ## 🚀 Quick Installation
 
 Promma can be installed globally via Bun or npm, allowing you to use the `promma` command from anywhere.
@@ -226,6 +230,36 @@ Or use aliases:
 
 ```bash
 promma clear
+```
+
+### View Digestion History
+
+```bash
+promma history
+```
+
+Or use aliases:
+
+```bash
+promma hist
+promma h
+```
+
+### Digest Web Content
+
+```bash
+promma digest <url> [custom_instruction] [options]
+```
+
+- `<url>`: The web page link to digest.
+- `[custom_instruction]`: Optional, custom instruction for summarizing the content.
+- `[options]`:
+  - `-d, --depth <number>`: Recursive crawling depth, defaults to `0` (no recursion, only crawls the initial page). For example, `1` means crawling the initial page and its first level of links, and so on. All collected content will be used as a holistic context for summarization.
+
+**Example:**
+
+```bash
+promma digest https://example.com/article "Summarize main points" -d 1
 ```
 
 ## 📂 Data Storage
