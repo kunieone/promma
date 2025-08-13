@@ -14,10 +14,12 @@ export class CommitService {
   constructor(apiKey: string) {
     this.genAI = new GoogleGenerativeAI(apiKey);
     this.model = this.genAI.getGenerativeModel({ 
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.5-flash-preview-05-20',
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 200,
+        maxOutputTokens: 1000,
+        topK: 40,
+        topP: 0.95,
       }
     });
   }
@@ -64,22 +66,30 @@ export class CommitService {
     // 获取变更的文件列表
     const changedFiles = this.getChangedFiles();
     
-    // 构建上下文信息
-    let context = `## Git Diff (暂存区变更)\n\n${diff}\n\n`;
+    // 限制 diff 大小（保留前 3000 字符）
+    const truncatedDiff = diff.length > 3000 ? diff.substring(0, 3000) + '\n... [diff 已截断]' : diff;
     
-    // 对每个变更的文件，获取其当前内容
+    // 构建上下文信息
+    let context = `## Git Diff (暂存区变更)\n\n${truncatedDiff}\n\n`;
+    
+    // 对每个变更的文件，获取其当前内容（限制每个文件最多 1000 字符）
     context += `## 变更文件的当前内容\n\n`;
     
-    for (const file of changedFiles) {
+    for (const file of changedFiles.slice(0, 5)) { // 最多处理 5 个文件
       if (fs.existsSync(file)) {
         try {
           const content = fs.readFileSync(file, 'utf-8');
           const ext = path.extname(file);
-          context += `### ${file}\n\n\`\`\`${ext.slice(1)}\n${content}\n\`\`\`\n\n`;
+          const truncatedContent = content.length > 1000 ? content.substring(0, 1000) + '\n... [文件内容已截断]' : content;
+          context += `### ${file}\n\n\`\`\`${ext.slice(1)}\n${truncatedContent}\n\`\`\`\n\n`;
         } catch (error) {
           context += `### ${file}\n\n[无法读取文件内容]\n\n`;
         }
       }
+    }
+    
+    if (changedFiles.length > 5) {
+      context += `\n... 还有 ${changedFiles.length - 5} 个文件被省略\n`;
     }
     
     return context;
@@ -95,31 +105,48 @@ export class CommitService {
   }
 
   private async generateMessage(context: string): Promise<string> {
-    const prompt = `你是一个 Git 提交信息生成专家。请根据以下代码变更生成一个简洁、准确的提交信息。
+    const prompt = `分析以下 Git 代码变更，生成一个规范的提交信息。
 
-要求：
-1. 提交信息应该简洁明了，通常不超过 50 个字符
-2. 使用动词开头（如：fix, feat, refactor, docs, style, test, chore）
-3. 说明做了什么，而不是如何做的
-4. 如果是功能性更改，说明其目的或影响
-5. 使用中文描述，但类型前缀使用英文
-6. 格式：<type>: <subject>
-   - feat: 新功能
-   - fix: 修复bug
-   - docs: 文档更新
-   - style: 代码格式调整
-   - refactor: 代码重构
-   - test: 测试相关
-   - chore: 构建过程或辅助工具的变动
+提交信息格式要求：
+- 格式：<type>: <description>
+- type 必须是以下之一：feat, fix, docs, style, refactor, test, chore
+- description 使用中文，简洁明了（不超过50字符）
+- 描述做了什么，不是怎么做的
 
-代码变更上下文：
+类型说明：
+- feat: 新增功能
+- fix: 修复缺陷
+- docs: 文档变更
+- style: 代码格式调整（不影响功能）
+- refactor: 代码重构（不影响功能）
+- test: 测试相关
+- chore: 构建/工具/依赖等变更
+
 ${context}
 
-请生成一个符合上述要求的提交信息：`;
+直接输出提交信息，不要有其他内容：`;
 
-    const result = await this.model.generateContent(prompt);
-    const response = await result.response;
-    return response.text().trim();
+    try {
+      const result = await this.model.generateContent(prompt);
+      const response = result.response;
+      
+      // 检查响应内容
+      if (!response.candidates || response.candidates.length === 0) {
+        throw new Error('模型未返回有效响应');
+      }
+      
+      const candidate = response.candidates[0];
+      if (!candidate || !candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+        console.error('响应候选内容:', JSON.stringify(candidate, null, 2));
+        throw new Error('模型响应为空');
+      }
+      
+      const text = candidate.content.parts[0]?.text || '';
+      return text.trim();
+    } catch (error) {
+      console.error('生成消息时出错:', error);
+      throw error;
+    }
   }
 
   private displayCommitMessage(message: string) {

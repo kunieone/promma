@@ -1,6 +1,6 @@
 {
   "name": "promma",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "CLI提示词管理工具，支持提示词的增删查改，并集成Gemini AI进行提示词生成",
   "module": "index.ts",
   "type": "module",

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(bun run:*)",
+      "Bash(git add:*)",
+      "Bash(./promma commit:*)",
+      "Bash(./promma config)",
+      "Bash(if [[ -n \"$GEMINI_API_KEY\" ]])",
+      "Bash(then echo \"API key is set in environment\")",
+      "Bash(else echo \"No API key in environment\")",
+      "Bash(fi)"
+    ],
+    "deny": []
+  }
+}

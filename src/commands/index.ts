@@ -999,7 +999,12 @@ export const initCommands = async () => {
     .description('生成智能的Git提交信息')
     .action(async () => {
       try {
-        const apiKey = await ensureApiKey();
+        await ensureApiKey();
+        const apiKey = getApiKey();
+        if (!apiKey) {
+          console.error(chalk.red('未找到API密钥'));
+          return;
+        }
         const { CommitService } = await import('../services/commitService');
         const commitService = new CommitService(apiKey);
         await commitService.generateCommitMessage();
