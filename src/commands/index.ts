@@ -992,6 +992,22 @@ export const initCommands = async () => {
       }
     });
 
+  // Commit command for generating git commit messages
+  program
+    .command('commit')
+    .aliases(['cm', 'ci'])
+    .description('生成智能的Git提交信息')
+    .action(async () => {
+      try {
+        const apiKey = await ensureApiKey();
+        const { CommitService } = await import('../services/commitService');
+        const commitService = new CommitService(apiKey);
+        await commitService.generateCommitMessage();
+      } catch (error) {
+        console.error(chalk.red('生成提交信息失败:'), error);
+      }
+    });
+
   // Import prompts from JSON file
   program
     .command('import <filePath>')
